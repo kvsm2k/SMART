@@ -1,0 +1,435 @@
+import tkinter as tk
+from tkinter import filedialog
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
+from xgboost import XGBRegressor
+from sklearn.neighbors import KNeighborsRegressor
+from PIL import Image, ImageTk
+from scipy.stats import pearsonr
+
+class AlgorithmRunner:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("𝗦𝗠𝗔𝗥𝗧: 𝗦𝗬𝗡𝗘𝗥𝗚𝗘𝗧𝗜𝗖 𝗠𝗔𝗖𝗛𝗜𝗡𝗘𝗟𝗘𝗔𝗥𝗡𝗜𝗡𝗚 𝗔𝗟𝗚𝗢𝗥𝗜𝗧𝗛𝗠𝗦 𝗙𝗢𝗥 𝗡𝗘𝗔𝗥 𝗥𝗘𝗔𝗟-𝗧𝗜𝗠𝗘 𝗙𝗢𝗥𝗖𝗔𝗦𝗧𝗜𝗡𝗚 𝗢𝗙 𝗧𝗘𝗠𝗣𝗘𝗥𝗔𝗧𝗨𝗥𝗘 ")
+        self.file_path = None 
+
+        # Train File selection
+        self.train_file_label = tk.Label(master, text="Select Train :")
+        self.train_file_label.grid(row=0, column=0, padx=10, pady=10)
+
+        self.train_file_path_var = tk.StringVar()
+        self.train_file_entry = tk.Entry(master, textvariable=self.train_file_path_var, width=40)
+        self.train_file_entry.grid(row=0, column=1, padx=10, pady=10)
+
+        self.train_browse_button = tk.Button(master, text="Browse Train File", command=self.browse_train_file)
+        self.train_browse_button.grid(row=0, column=2, padx=10, pady=10)
+
+        # File selection
+        self.file_label = tk.Label(master, text="Select File:")
+        self.file_label.grid(row=1, column=0, padx=10, pady=10)
+
+        self.file_path_var = tk.StringVar()
+        self.file_entry = tk.Entry(master, textvariable=self.file_path_var, width=40)
+        self.file_entry.grid(row=1, column=1, padx=10, pady=10)
+
+        self.browse_button = tk.Button(master, text="Browse", command=self.browse_file)
+        self.browse_button.grid(row=1, column=2, padx=10, pady=10)
+
+        # Algorithm buttons
+        self.algorithm_label = tk.Label(master, text="Select Algorithm:")
+        self.algorithm_label.grid(row=1, column=8, padx=10, pady=10)
+
+        algorithms = ["XGBOOST", "KNN","Multimodel Mean"]
+        self.algorithm_var = tk.StringVar()  # Define the control variable
+        self.algorithm_var.set(algorithms[0])  # Set default value
+        self.algorithm_menu = tk.OptionMenu(master, self.algorithm_var, *algorithms)
+        self.algorithm_menu.grid(row=1, column=9, padx=10, pady=10)
+
+        # Run button
+        self.run_button = tk.Button(master, text="Run Algorithm", command=self.run_algorithm)
+        self.run_button.grid(row=1, column=10, columnspan=20, pady=20)
+
+        # Output text
+        self.output_text = tk.Text(master, height=10, width=50)
+        self.output_text.grid(row=1, column=30, columnspan=3, pady=10)
+
+        # Matplotlib Figure and Canvas
+        self.fig = Figure(figsize=(14, 5), tight_layout=True)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.master)
+        self.canvas.get_tk_widget().grid(row=2, column=0, columnspan=100, pady=10)
+
+        # Load images
+        left_image_path = "C:/Users/seraf/OneDrive/Desktop/NRSC FINAL FOLDER/NICES_logo.png"
+        right_image_path = "C:/Users/seraf/OneDrive/Desktop/NRSC FINAL FOLDER/NRSC_logo (1).png"
+
+        # Create ImageTk objects
+        self.left_image = ImageTk.PhotoImage(Image.open(left_image_path))
+        self.right_image = ImageTk.PhotoImage(Image.open(right_image_path))
+
+        # Insert images
+        self.left_label = tk.Label(master, image=self.left_image)
+        self.left_label.grid(row=0, column=70, padx=5, pady=5, sticky="w")
+
+        self.right_label = tk.Label(master, image=self.right_image)
+        self.right_label.grid(row=0, column=71, padx=5, pady=5, sticky="e")
+
+        self.model_xgboost = None
+        self.model_knn = None
+        self.scaler = None
+
+        self.model_xgboost = None
+        self.model_knn = None
+        self.scaler = MinMaxScaler()  # Initialize the scaler
+
+    def browse_train_file(self):
+        train_file_path = filedialog.askopenfilename()
+        self.train_file_path_var.set(train_file_path)  # Set the text in the entry widget
+
+    def browse_file(self):
+        file_path = filedialog.askopenfilename()
+        self.file_path_var.set(file_path)  # Set the text in the entry widget
+
+    def run_algorithm(self):
+        train_file_path = self.train_file_path_var.get()  # Retrieve the train file path from the entry widget
+        file_path = self.file_path_var.get()  # Retrieve the file path from the entry widget
+        selected_algorithm = self.algorithm_var.get()
+
+        try:
+            df11 = pd.read_csv(file_path, parse_dates=['TIMESTAMP'], dayfirst=True)
+            if selected_algorithm == "XGBOOST":
+                # Fit the scaler with the training data
+                self.scaler.fit(df11.drop(columns=['TIMESTAMP', 'AirTC_18m']))
+                self.algorithm_1(df11, train_file_path)
+            elif selected_algorithm == "KNN":
+                # Fit the scaler with the training data
+                self.scaler.fit(df11.drop(columns=['TIMESTAMP', 'AirTC_18m']))
+                self.algorithm_2(df11, train_file_path)
+            elif selected_algorithm == "Multimodel Mean":
+                # Calculate predictions for both XGBoost and KNN
+                y_pred_xgboost_unseen = self.calculate_xgboost_predictions(df11, train_file_path)
+                y_pred_knn_unseen = self.calculate_knn_predictions(df11, train_file_path)
+                self.algorithm_3(df11, y_pred_xgboost_unseen, y_pred_knn_unseen)
+            else:
+                print("Invalid algorithm selection.")
+
+        except pd.errors.EmptyDataError:
+            print("Error: Selected file is empty or not in the correct format.")
+    def algorithm_1(self, df11, train_file_path):
+        # Assuming df is the DataFrame after the previous preprocessing steps
+        df = pd.read_csv(train_file_path, parse_dates=['TIMESTAMP'], dayfirst=True)
+        # Convert epoch timestamps to datetime objects
+        df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'], unit='s')
+        df = df.dropna(subset=['TIMESTAMP'])
+        df['TIMESTAMP'] = df['TIMESTAMP'].apply(lambda x: x.timestamp())
+
+        # Feature scaling for the training dataset
+        scaler = MinMaxScaler()
+        X_scaled = scaler.fit_transform(df.drop(columns=['TIMESTAMP', 'AirTC_18m']))  # Adjust the columns based on your features
+
+        X = pd.DataFrame(X_scaled, columns=df.columns.difference(['TIMESTAMP', 'AirTC_18m']))
+        y = df['AirTC_18m']
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Build the XGBoost model
+        model = XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, max_depth=3)
+
+        # Train the XGBoost model
+        model.fit(X_train, y_train)
+
+        # Store the trained XGBoost model as an attribute of the class
+        self.model_xgboost = model
+
+        # Make predictions on the test set
+        y_pred_xgboost = model.predict(X_test)
+
+        # Evaluate the XGBoost model
+        mse_xgboost = mean_squared_error(y_test, y_pred_xgboost)
+        print(f'Mean Squared Error (XGBoost): {mse_xgboost}')
+
+        # Plot the results (omitted for brevity)
+
+        # Load the unseen dataset for prediction (df11)
+        df11['TIMESTAMP'] = pd.to_datetime(df11['TIMESTAMP'], format='%d-%m-%Y %H:%M')
+        df11 = df11.dropna(subset=['TIMESTAMP'])
+        df11['TIMESTAMP'] = df11['TIMESTAMP'].apply(lambda x: x.timestamp())
+
+        # Feature scaling for the training dataset
+        X_unseen_scaled = scaler.transform(df11.drop(columns=['TIMESTAMP', 'AirTC_18m']))
+
+        # Make predictions on the unseen dataset
+        y_pred_xgboost_unseen = model.predict(X_unseen_scaled)
+
+        # Visualize the results (omitted for brevity)
+
+        
+        
+
+
+        # Plot the results
+        self.fig.clear()
+        ax1 = self.fig.add_subplot(131)
+        ax1.plot(y_test.values, label='Original', color='blue', marker='o')
+        ax1.plot(y_pred_xgboost, label='Predicted (XGBoost)', color='green', marker='x')
+        ax1.set_title('Orginal vs Predicted XGBOOST (Seen Data)')
+        ax1.set_xlabel('2016-2019')
+        ax1.set_ylabel('Temp(°c)')
+        ax1.legend()
+
+        # Load the unseen dataset for prediction (df11)
+        df11['TIMESTAMP'] = pd.to_datetime(df11['TIMESTAMP'], unit='s')
+        df11 = df11.dropna(subset=['TIMESTAMP'])
+        df11['TIMESTAMP'] = df11['TIMESTAMP'].apply(lambda x: x.timestamp())
+
+        # Feature scaling for the training dataset
+        X_unseen_scaled = scaler.transform(df11.drop(columns=['TIMESTAMP', 'AirTC_18m']))
+
+        # Make predictions on the unseen dataset
+        y_pred_xgboost_unseen = model.predict(X_unseen_scaled)
+
+        # Visualize the results for the second plot
+        ax2 = self.fig.add_subplot(132)
+        ax2.scatter(df11['TIMESTAMP'].index, df11['AirTC_18m'], color='green', label='Original Values (Unseen Data)')
+        ax2.scatter(df11['TIMESTAMP'].index, y_pred_xgboost_unseen, color='red', label='Predicted Values (XGBoost, Unseen Data)')
+        ax2.set_xlabel("72 hrs 3-DAYS Prediction")
+        ax2.set_ylabel("Temp(°c)")
+        ax2.set_title("XG BOOST PREDICTION (Unseen Data)")
+        ax2.legend()
+
+        # Embed the Matplotlib figure in the Tkinter window
+        self.canvas.draw()
+
+        # Store the trained XGBoost model as an attribute of the class
+        self.model_xgboost = model
+
+        # Visualize the results for the second scatter plot (in the middle)
+        ax3 = self.fig.add_subplot(133)
+        ax3.scatter(y_pred_xgboost_unseen, df11['AirTC_18m'], color='red', label='Predicted  (XGBOOST, Unseen Data)')
+        ax3.set_xlabel("Orginal Values")
+        ax3.set_ylabel("Predicted Values (XGBOOST)")
+        ax3.set_title("XGBOOST Prediction (Unseen Data)")
+        ax3.legend()
+
+        # Calculate and print the correlation coefficient
+        correlation_coefficient, _ = pearsonr(y_test, y_pred_xgboost)
+        print(f'Correlation Coefficient (XGBoost): {correlation_coefficient}')
+        # Evaluate the XGBoost model
+        mse_xgboost = mean_squared_error(y_test, y_pred_xgboost)
+        print(f'Mean Squared Error (XGBoost): {mse_xgboost}')
+        rmse_xgboost = np.sqrt(mse_xgboost)
+        print(f'Root Mean Squared Error (XGBoost): {rmse_xgboost}')
+
+        output_text_xgboost = f'MSE(XGBoost): {mse_xgboost: .3f}\n'
+        output_text_xgboost += f'RMSE(XGBoost): {rmse_xgboost: .3f}\n'
+        output_text_xgboost += f'CC(XGBoost): {correlation_coefficient: .3f}\n'
+        self.output_text.insert(tk.END, output_text_xgboost)
+
+        self.canvas.draw()
+    def algorithm_2(self, df11, train_file_path):
+        learning_rate = 0.1  # Select a learning rate
+
+        # Assuming df is the DataFrame after the previous preprocessing steps
+        df = pd.read_csv(r'C:/Users/seraf/OneDrive/Desktop/NRSC FINAL FOLDER/Final_data_1.csv', parse_dates=['TIMESTAMP'], dayfirst=True)
+        df = df.dropna(subset=['TIMESTAMP'])
+        df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'], unit='s')
+        df = df.dropna(subset=['TIMESTAMP'])
+        df['TIMESTAMP'] = df['TIMESTAMP'].apply(lambda x: x.timestamp())
+
+        # Feature scaling for the training dataset
+        scaler = MinMaxScaler()
+        X_scaled = scaler.fit_transform(df.drop(columns=['TIMESTAMP', 'AirTC_18m']))  # Adjust the columns based on your features
+
+        X = pd.DataFrame(X_scaled, columns=df.columns.difference(['TIMESTAMP', 'AirTC_18m']))
+        y = df['AirTC_18m']
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Build the KNN model
+        knn_model = KNeighborsRegressor(n_neighbors=5)
+
+        # Train the KNN model
+        knn_model.fit(X_train, y_train)
+
+        # Make predictions on the test set
+        y_pred_knn = knn_model.predict(X_test)
+
+        # Evaluate the KNN model
+        mse_knn = mean_squared_error(y_test, y_pred_knn)
+
+        # Load the unseen dataset for prediction (df11)
+        df11['TIMESTAMP'] = pd.to_datetime(df11['TIMESTAMP'], unit='s')
+        df11 = df11.dropna(subset=['TIMESTAMP'])
+        df11['TIMESTAMP'] = df11['TIMESTAMP'].apply(lambda x: x.timestamp())
+
+        # Feature scaling for the training dataset
+        X_unseen_scaled = scaler.transform(df11.drop(columns=['TIMESTAMP', 'AirTC_18m']))
+
+        # Make predictions on the unseen dataset
+        y_pred_knn_unseen = knn_model.predict(X_unseen_scaled)
+
+        # Store the trained KNN model and scaler as attributes of the class
+        self.model_knn = knn_model
+        self.scaler = scaler
+
+        # Calculate and print the correlation coefficient
+        correlation_coefficient, _ = pearsonr(y_test, y_pred_knn)
+        print(f'Correlation Coefficient (KNN): {correlation_coefficient}')
+        # Evaluate the KNN model
+        mse_knn = mean_squared_error(y_test, y_pred_knn)
+        print(f'Mean Squared Error (KNN): {mse_knn}')
+        rmse_knn = np.sqrt(mse_knn)
+        print(f'Root Mean Squared Error (KNN): {rmse_knn}')
+
+        self.fig.clear()
+        # Visualize the results for the first scatter plot (on the left)
+        ax2 = self.fig.add_subplot(132)
+        ax2.scatter(df11['TIMESTAMP'].index, df11['AirTC_18m'], color='green', label='Original Values (Unseen Data)')
+        ax2.scatter(df11['TIMESTAMP'].index, y_pred_knn_unseen, color='red', label='Predicted Values (KNN, Unseen Data)')
+        ax2.set_xlabel("72 hrs 3-DAYS Prediction")
+        ax2.set_ylabel("Temp(°c)")
+        ax2.set_title("KNN vs Orginal values (Unseen Data)")
+        ax2.legend()
+
+        # Visualize the results for the second scatter plot (in the middle)
+        ax3 = self.fig.add_subplot(133)
+        ax3.scatter(y_pred_knn_unseen, df11['AirTC_18m'], color='red', label='Predicted  (KNN, Unseen Data)')
+        ax3.set_xlabel("Orginal Values")
+        ax3.set_ylabel("Predicted Values (KNN)")
+        ax3.set_title("KNN Predictions (Unseen Data)")
+        ax3.legend()
+
+        # Visualize the results for the third scatter plot (on the right)
+        ax1 = self.fig.add_subplot(131)
+        ax1.plot(y_test.values, label='Original', color='blue', marker='o')
+        ax1.plot(y_pred_knn, label='Predicted (KNN)', color='green', marker='x')
+        ax1.set_title('Orginal vs Predicted KNN (Seen Data)')
+        ax1.set_xlabel('2016-2019')
+        ax1.set_ylabel('Temp(°c)')
+        ax1.legend()
+
+        # Append the output to the text widget for KNN
+        output_text_knn = f'MSE(KNN): {mse_knn: .3f}\n'
+        output_text_knn += f'RMSE(KNN): {rmse_knn: .3f}\n'
+        output_text_knn += f'CC(KNN): {correlation_coefficient: .3f}\n'
+        self.output_text.insert(tk.END, output_text_knn)
+        self.canvas.draw()
+
+    def algorithm_3(self, df11, y_pred_xgboost_unseen, y_pred_knn_unseen):
+        # Combine predictions from both XGBoost and KNN using simple mean
+        y_pred_combined = (y_pred_xgboost_unseen + y_pred_knn_unseen) / 2
+
+        # Plot the combined predictions (omitted for brevity)
+
+        # Evaluate the combined model
+        mse_combined = mean_squared_error(df11['AirTC_18m'], y_pred_combined)
+        print(f'Mean Squared Error (Combined): {mse_combined}')
+
+        # Plot the combined predictions (omitted for brevity)
+
+        # Append the output to the text widget for the combined model
+        output_text_combined = f'MSE(Combined): {mse_combined: .3f}\n'
+        self.output_text.insert(tk.END, output_text_combined)
+
+        # Plot the results
+        self.fig.clear()
+        ax = self.fig.add_subplot(111)
+        
+        ax.plot(df11['AirTC_18m'], label='Original', color='blue', marker='o')
+        ax.plot(y_pred_combined, label='Predicted (Combined)', color='green', marker='x')
+        ax.set_title('Orginal vs Predicted (Combined)')
+        ax.set_xlabel('Timestamp')
+        ax.set_ylabel('Temperature (°C)')
+        ax.legend()
+
+        # Embed the Matplotlib figure in the Tkinter window
+        self.canvas.draw()
+
+        # Calculate and print the correlation coefficient for the combined model
+        correlation_coefficient, _ = pearsonr(df11['AirTC_18m'], y_pred_combined)
+        print(f'Correlation Coefficient (Combined): {correlation_coefficient}')
+
+        # Append the output to the text widget for the combined model
+        output_text_combined = f'Correlation Coefficient (Combined): {correlation_coefficient}\n'
+        self.output_text.insert(tk.END, output_text_combined)
+
+        # Notify the user
+        print("Combined model evaluation complete.")
+
+    def calculate_xgboost_predictions(self, df11, train_file_path):
+        # Assuming df is the DataFrame after the previous preprocessing steps
+        df = pd.read_csv(train_file_path, parse_dates=['TIMESTAMP'], dayfirst=True)
+        df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'], format='%d-%m-%Y %H:%M')
+        df = df.dropna(subset=['TIMESTAMP'])
+        df['TIMESTAMP'] = df['TIMESTAMP'].apply(lambda x: x.timestamp())
+
+        # Feature scaling for the training dataset
+        X_scaled = self.scaler.fit_transform(df.drop(columns=['TIMESTAMP', 'AirTC_18m']))  # Adjust the columns based on your features
+
+        X = pd.DataFrame(X_scaled, columns=df.columns.difference(['TIMESTAMP', 'AirTC_18m']))
+        y = df['AirTC_18m']
+
+        # Build the XGBoost model
+        model = XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, max_depth=3)
+
+        # Train the XGBoost model
+        model.fit(X, y)
+
+        # Store the trained XGBoost model as an attribute of the class
+        self.model_xgboost = model
+
+        # Load the unseen dataset for prediction (df11)
+        df11['TIMESTAMP'] = pd.to_datetime(df11['TIMESTAMP'], format='%d-%m-%Y %H:%M')
+        df11 = df11.dropna(subset=['TIMESTAMP'])
+        df11['TIMESTAMP'] = df11['TIMESTAMP'].apply(lambda x: x.timestamp())
+
+        # Feature scaling for the training dataset
+        X_unseen_scaled = self.scaler.transform(df11.drop(columns=['TIMESTAMP', 'AirTC_18m']))
+
+        # Make predictions on the unseen dataset
+        y_pred_xgboost_unseen = model.predict(X_unseen_scaled)
+
+        return y_pred_xgboost_unseen
+
+    def calculate_knn_predictions(self, df11, train_file_path):
+        # Assuming df is the DataFrame after the previous preprocessing steps
+        df = pd.read_csv(train_file_path, parse_dates=['TIMESTAMP'], dayfirst=True)
+        df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'], format='%d-%m-%Y %H:%M')
+        df = df.dropna(subset=['TIMESTAMP'])
+        df['TIMESTAMP'] = df['TIMESTAMP'].apply(lambda x: x.timestamp())
+
+        # Feature scaling for the training dataset
+        X_scaled = self.scaler.fit_transform(df.drop(columns=['TIMESTAMP', 'AirTC_18m']))  # Adjust the columns based on your features
+
+        X = pd.DataFrame(X_scaled, columns=df.columns.difference(['TIMESTAMP', 'AirTC_18m']))
+        y = df['AirTC_18m']
+
+        # Build the KNN model
+        model = KNeighborsRegressor(n_neighbors=5)
+
+        # Train the KNN model
+        model.fit(X, y)
+
+        # Store the trained KNN model as an attribute of the class
+        self.model_knn = model
+
+        # Load the unseen dataset for prediction (df11)
+        df11['TIMESTAMP'] = pd.to_datetime(df11['TIMESTAMP'], format='%d-%m-%Y %H:%M')
+        df11 = df11.dropna(subset=['TIMESTAMP'])
+        df11['TIMESTAMP'] = df11['TIMESTAMP'].apply(lambda x: x.timestamp())
+
+        # Feature scaling for the training dataset
+        X_unseen_scaled = self.scaler.transform(df11.drop(columns=['TIMESTAMP', 'AirTC_18m']))
+
+        # Make predictions on the unseen dataset
+        y_pred_knn_unseen = model.predict(X_unseen_scaled)
+
+        return y_pred_knn_unseen
+
+root = tk.Tk()
+app = AlgorithmRunner(root)
+root.mainloop()
